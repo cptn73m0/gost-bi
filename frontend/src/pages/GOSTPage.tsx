@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
 
 interface GOSTTemplate {
   code: string;
@@ -28,7 +27,7 @@ export function GOSTPage() {
   };
 
   return (
-    <AppLayout>
+    <>
       <div className="page-header">
         <h1 className="page-title">ГОСТ-отчётность</h1>
         <p className="page-subtitle">Формирование регламентированной отчётности по ГОСТ, ФНС и Росстату</p>
@@ -122,6 +121,6 @@ export function GOSTPage() {
           </div>
         </div>
       </div>
-    </AppLayout>
+    </>
   );
 }

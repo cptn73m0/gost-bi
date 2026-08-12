@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { useTheme } from "@/hooks/useTheme";
 
 export function SettingsPage() {
@@ -15,7 +14,7 @@ export function SettingsPage() {
   };
 
   return (
-    <AppLayout>
+    <>
       <div className="page-header">
         <h1 className="page-title">Настройки</h1>
         <p className="page-subtitle">Конфигурация системы, подключения и оформление</p>
@@ -153,6 +152,6 @@ export function SettingsPage() {
           </div>
         </div>
       </div>
-    </AppLayout>
+    </>
   );
 }

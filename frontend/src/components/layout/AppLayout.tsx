@@ -51,10 +51,9 @@ const NAV_SECTIONS: SidebarSection[] = [
   },
 ];
 
-export function AppLayout({ children }: { children: ReactNode }) {
+export function AppLayout({ children, activePage, onNavigate }: { children: ReactNode; activePage?: string; onNavigate?: (page: string) => void }) {
   const { theme, toggle } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
-  const [activeItem, setActiveItem] = useState("home");
 
   return (
     <div style={{ display: "flex", height: "100vh" }}>
@@ -72,8 +71,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
               {section.items.map((item) => (
                 <button
                   key={item.id}
-                  className={`sidebar-item${activeItem === item.id ? " active" : ""}`}
-                  onClick={() => setActiveItem(item.id)}
+                  className={`sidebar-item${activePage === item.id ? " active" : ""}`}
+                  onClick={() => onNavigate?.(item.id)}
                   title={item.label}
                 >
                   <span className="sidebar-item-icon">{item.icon}</span>
@@ -126,7 +125,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <div className="header-left">
             <div className="breadcrumb">
               <span className="breadcrumb-item current">
-                {NAV_SECTIONS.flatMap((s) => s.items).find((i) => i.id === activeItem)?.label ?? "Главная"}
+                {NAV_SECTIONS.flatMap((s) => s.items).find((i) => i.id === activePage)?.label ?? "Главная"}
               </span>
             </div>
           </div>

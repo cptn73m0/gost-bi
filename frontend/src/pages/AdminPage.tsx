@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { DataTable } from "@/components/dashboard/DataTable";
 
 const USERS = [
@@ -38,7 +37,7 @@ export function AdminPage() {
   const [tab, setTab] = useState<"users" | "audit" | "health">("users");
 
   return (
-    <AppLayout>
+    <>
       <div className="page-header">
         <h1 className="page-title">Администрирование</h1>
         <p className="page-subtitle">Управление пользователями, аудит действий и состояние системы</p>
@@ -153,6 +152,6 @@ export function AdminPage() {
           </div>
         </div>
       )}
-    </AppLayout>
+    </>
   );
 }

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { DataTable } from "@/components/dashboard/DataTable";
 
 const SAMPLE_SCHEMA = `-- Доступные таблицы:
@@ -49,7 +48,7 @@ export function SQLLabPage() {
   };
 
   return (
-    <AppLayout>
+    <>
       <div className="page-header">
         <h1 className="page-title">SQL-лаборатория</h1>
         <p className="page-subtitle">Запросы к данным на естественном языке или на SQL</p>
@@ -152,6 +151,6 @@ export function SQLLabPage() {
           </div>
         </div>
       )}
-    </AppLayout>
+    </>
   );
 }

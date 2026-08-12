@@ -1,4 +1,3 @@
-import { AppLayout } from "@/components/layout/AppLayout";
 import { KPIWidget, WidgetCard } from "@/components/dashboard/WidgetCard";
 import { DataTable } from "@/components/dashboard/DataTable";
 import { SimpleChart } from "@/components/dashboard/SimpleChart";
@@ -39,13 +38,7 @@ const SALES_TABLE_ROWS = [
 
 export function HomePage() {
   return (
-    <AppLayout>
-      <div className="page-header">
-        <h1 className="page-title">Добро пожаловать, Алексей Иванович</h1>
-        <p className="page-subtitle">Обзор ключевых показателей компании за август 2026 года</p>
-      </div>
-
-      {/* KPI */}
+    <>
       <div className="dashboard-grid cols-4" style={{ marginBottom: 20 }}>
         <WidgetCard title="Выручка">
           <KPIWidget label="За текущий месяц" value="1 247 млн ₽" trend={8.2} trendLabel="к прошлому месяцу" />
@@ -70,6 +63,6 @@ export function HomePage() {
           <DataTable columns={SALES_TABLE_COLS} rows={SALES_TABLE_ROWS} pageSize={6} />
         </WidgetCard>
       </div>
-    </AppLayout>
+    </>
   );
 }
