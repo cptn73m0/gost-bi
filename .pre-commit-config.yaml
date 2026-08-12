@@ -1,0 +1,92 @@
+repos:
+  # ============================================================
+  # General checks
+  # ============================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  # ============================================================
+  # Python: formatting, linting, type checking
+  # ============================================================
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
+    hooks:
+      - id: ruff-format
+        name: "ruff format"
+      - id: ruff-check
+        name: "ruff check"
+        args: ["--fix"]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.0
+    hooks:
+      - id: mypy
+        name: "mypy (strict)"
+        args: ["--strict", "--ignore-missing-imports"]
+        additional_dependencies:
+          - pydantic>=2.10
+          - sqlalchemy>=2.0
+          - fastapi>=0.115
+          - types-pyyaml
+          - types-redis
+        files: ^src/
+        pass_filenames: true
+
+  # ============================================================
+  # Secrets detection
+  # ============================================================
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        name: "detect secrets"
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: >
+          (?x)^(
+            poetry\.lock|
+            package-lock\.json|
+            yarn\.lock|
+            .*\.ipynb
+          )$
+
+  # ============================================================
+  # Security: bandit
+  # ============================================================
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.0
+    hooks:
+      - id: bandit
+        name: "bandit security scan"
+        args: ["-c", "pyproject.toml", "-ll"]
+        files: ^src/.*\.py$
+
+  # ============================================================
+  # SQL: detect dangerous patterns
+  # ============================================================
+  - repo: local
+    hooks:
+      - id: sql-injection-check
+        name: "SQL injection check"
+        entry: python scripts/check_sql_injection.py
+        language: python
+        files: ^src/.*\.py$
+        pass_filenames: true
+
+      - id: no-destructive-sql
+        name: "no destructive SQL in code"
+        entry: python scripts/check_destructive_sql.py
+        language: python
+        files: ^src/.*\.py$
+        pass_filenames: true

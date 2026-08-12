@@ -1,0 +1,139 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gost-bi"
+version = "0.1.0"
+description = "Российская BI-платформа на базе Apache Superset с AI-ускорением"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.12"
+authors = [
+    {name = "GOST BI Contributors"}
+]
+keywords = ["bi", "superset", "1c", "analytics", "import-substitution", "russia"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Manufacturing",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: TypeScript",
+    "Topic :: Database :: Front-Ends",
+    "Topic :: Office/Business :: Financial :: Spreadsheet",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.34,<1.0",
+    "sqlalchemy>=2.0,<3.0",
+    "alembic>=1.14,<2.0",
+    "httpx>=0.28,<1.0",
+    "redis>=5.2,<6.0",
+    "celery>=5.4,<6.0",
+    "pydantic>=2.10,<3.0",
+    "pydantic-settings>=2.7,<3.0",
+    "sqlglot>=26.0,<27.0",
+    "jinja2>=3.1,<4.0",
+    "weasyprint>=62,<63",
+    "openpyxl>=3.1,<4.0",
+    "python-multipart>=0.0.19",
+    "pyyaml>=6.0,<7.0",
+    "tenacity>=9.0,<10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9.0",
+    "pytest-cov>=6.0,<7.0",
+    "pytest-asyncio>=0.24,<1.0",
+    "pytest-timeout>=2.3,<3.0",
+    "pytest-xdist>=3.6,<4.0",
+    "hypothesis>=6.122,<7.0",
+    "ruff>=0.8,<1.0",
+    "mypy>=1.14,<2.0",
+    "pre-commit>=4.0,<5.0",
+    "coverage[toml]>=7.6,<8.0",
+    "httpx",  # для TestClient
+]
+quality = [
+    "great-expectations>=1.3,<2.0",
+    "bandit>=1.8,<2.0",
+    "semgrep>=1.100,<2.0",
+    "detect-secrets>=1.5,<2.0",
+]
+test = [
+    "playwright>=1.50,<2.0",
+    "locust>=2.32,<3.0",
+    "testcontainers>=4.9,<5.0",
+    "docker>=7.1,<8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+exclude = ["superset/", "venv/", ".venv/", "build/", "dist/"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "N",        # pep8-naming
+    "B",        # flake8-bugbear
+    "C4",       # flake8-comprehensions
+    "SIM",      # flake8-simplify
+    "RUF",      # ruff-specific
+    "TCH",      # flake8-type-checking-imports
+    "UP",       # pyupgrade
+]
+ignore = ["E501"]  # line too long handled by formatter
+
+[tool.ruff.lint.isort]
+known-first-party = ["gost_bi"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+warn_unreachable = true
+warn_unused_configs = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+timeout = 30
+addopts = "-v --strict-markers --tb=short"
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["src/superset/*", "tests/*"]
+
+[tool.coverage.report]
+exclude_also = [
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+fail_under = 85
+
+[tool.bandit]
+exclude_dirs = ["superset/", "tests/", "venv/"]
+skips = ["B101"]  # assert used (ok in tests)

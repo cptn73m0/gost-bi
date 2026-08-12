@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.so
+
+# Virtualenv
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+tests/visual/current/
+tests/visual/diffs/
+
+# Secrets
+.env
+.env.local
+*.key
+*.pem
+.secrets.baseline
+
+# Docker
+docker-compose.override.yml
+
+# Node
+node_modules/
+frontend/dist/
+
+# Superset
+superset_config.py
+superset.db
+app.db

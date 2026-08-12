@@ -1,0 +1,241 @@
+name: GOST BI CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.12"
+  POETRY_VERSION: "1.8"
+
+jobs:
+  # ============================================================
+  # Level 0: Fast pre-checks
+  # ============================================================
+  preflight:
+    name: "L0: Preflight (lint + typecheck + secrets)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: pip install ruff mypy detect-secrets bandit
+
+      - name: Ruff format check
+        run: ruff format --check src/ tests/
+
+      - name: Ruff lint
+        run: ruff check src/ tests/
+
+      - name: Mypy strict typecheck
+        run: mypy --strict src/
+
+      - name: Detect secrets
+        run: detect-secrets-hook --baseline .secrets.baseline
+
+  # ============================================================
+  # Level 1: Unit tests (<30s)
+  # ============================================================
+  unit-tests:
+    name: "L1: Unit tests"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: preflight
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install project
+        run: pip install -e ".[dev]"
+
+      - name: Run unit tests
+        run: |
+          pytest tests/unit/ \
+            -x \
+            --timeout=30 \
+            --cov=src \
+            --cov-report=term \
+            --cov-report=xml \
+            --cov-fail-under=85
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit
+          path: coverage.xml
+
+  # ============================================================
+  # Level 2: Integration tests (<5min)
+  # ============================================================
+  integration-tests:
+    name: "L2: Integration tests"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: unit-tests
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: gostbi_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install project
+        run: pip install -e ".[dev,test]"
+
+      - name: Run integration tests
+        run: |
+          pytest tests/integration/ \
+            -x \
+            --timeout=300 \
+            -m "not slow" \
+            -v
+
+  # ============================================================
+  # Level 6: SQL verification
+  # ============================================================
+  sql-verification:
+    name: "L6: SQL verification"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: integration-tests
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: gostbi_verify
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install project
+        run: pip install -e ".[dev]"
+
+      - name: Run SQL verification suite
+        run: python -m gost_bi.quality.sql_verifier --suite all --db postgresql://test:test@localhost:5432/gostbi_verify
+
+  # ============================================================
+  # Level 9: Security scan
+  # ============================================================
+  security-scan:
+    name: "L9: Security scan"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: preflight
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install security tools
+        run: pip install bandit safety semgrep
+
+      - name: Bandit SAST
+        run: bandit -r src/ -c pyproject.toml -ll
+
+      - name: Safety dependency check
+        run: safety check --full-report
+        continue-on-error: true
+
+      - name: Semgrep
+        run: semgrep --config auto --error src/
+
+  # ============================================================
+  # Level 10: AI Code Review (Claude Code)
+  # ============================================================
+  ai-review:
+    name: "L10: AI Code Review"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [unit-tests, integration-tests]
+    if: github.event_name == 'pull_request'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          model: claude-opus-4-5-20251101
+          prompt: |
+            Проведи код-ревью для pull request проекта ГОСТ-BI — российской BI-платформы на базе Apache Superset.
+
+            ТРЕБОВАНИЯ:
+            1. Российский стек: Astra Linux, Tantor/Postgres Pro.
+            2. Безопасность: 152-ФЗ, никаких утечек PII в логи.
+            3. Все API на русском языке (сообщения об ошибках, названия полей).
+            4. Точность SQL критична — бизнес принимает решения по этим данным.
+
+            Формат:
+            - 🔴 CRITICAL: блокирующие проблемы
+            - 🟡 WARNING: желательно исправить
+            - 🔵 SUGGESTION: рекомендации
+            - 🛡️ SAFETY: оценка рисков
+
+            Указывай файл, строку и рекомендацию для каждого пункта.
+          max_turns: 30
+          allowed_tools: Read, Grep, Glob, Bash(pytest, mypy)
+
+  # ============================================================
+  # Docker build check
+  # ============================================================
+  docker-check:
+    name: "Docker build check"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [integration-tests, security-scan]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker compose -f docker/docker-compose.yml build
+
+      - name: Scan Docker image
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          image-ref: gost-bi:latest
+          format: table
+          exit-code: 0
+          severity: CRITICAL,HIGH

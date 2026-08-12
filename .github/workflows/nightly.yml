@@ -1,0 +1,228 @@
+name: Nightly Quality Gates
+
+on:
+  schedule:
+    - cron: "0 2 * * *"  # 02:00 MSK every night
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # ============================================================
+  # Level 4: Property-based tests + fuzzing
+  # ============================================================
+  property-tests:
+    name: "L4: Property-based tests"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: gostbi_prop
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install project
+        run: pip install -e ".[dev,test]"
+
+      - name: Run property-based tests
+        run: |
+          pytest tests/ \
+            -m "property" \
+            --timeout=1800 \
+            --hypothesis-show-statistics \
+            --hypothesis-profile=ci \
+            -n auto \
+            -v
+
+      - name: SQL fuzzing (SQLSmith)
+        run: |
+          python scripts/sql_fuzzer.py \
+            --db postgresql://test:test@localhost:5432/gostbi_prop \
+            --iterations 1000 \
+            --timeout 1800
+
+  # ============================================================
+  # Level 7: Data consistency (Great Expectations)
+  # ============================================================
+  data-consistency:
+    name: "L7: Data consistency"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: gostbi_ge
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install project
+        run: pip install -e ".[dev,quality]"
+
+      - name: Run Great Expectations suite
+        run: great_expectations checkpoint run metadata_quality
+
+      - name: Alembic migration integrity
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+
+  # ============================================================
+  # Level 8: Performance benchmarks
+  # ============================================================
+  benchmarks:
+    name: "L8: Performance benchmarks"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: gostbi_bench
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install project
+        run: pip install -e ".[dev,test]"
+
+      - name: Run benchmarks
+        run: |
+          pytest tests/benchmarks/ \
+            -x \
+            --timeout=3600 \
+            --benchmark-only \
+            --benchmark-autosave \
+            --benchmark-compare \
+            -v
+
+      - name: Check for regressions
+        run: python scripts/check_benchmark_regression.py
+
+  # ============================================================
+  # Level 5: Visual regression
+  # ============================================================
+  visual-regression:
+    name: "L5: Visual regression"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install project + Playwright
+        run: |
+          pip install -e ".[dev,test]"
+          playwright install chromium
+
+      - name: Run visual regression
+        run: python scripts/visual_regression.py --threshold 0.005
+
+      - name: Upload diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diffs
+          path: tests/visual/diffs/
+
+  # ============================================================
+  # Full CVE scan (deep)
+  # ============================================================
+  deep-security:
+    name: "Deep security scan"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install tools
+        run: pip install bandit safety semgrep pip-audit
+
+      - name: pip-audit
+        run: pip-audit --strict
+
+      - name: OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: http://localhost:8088
+          fail_level: HIGH
+
+  # ============================================================
+  # Report generation
+  # ============================================================
+  quality-report:
+    name: "Generate quality report"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [property-tests, data-consistency, benchmarks, visual-regression, deep-security]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate report
+        run: |
+          echo "# Nightly Quality Report — $(date +%Y-%m-%d)" > quality-report.md
+          echo "" >> quality-report.md
+          echo "| Gate | Status |" >> quality-report.md
+          echo "|------|--------|" >> quality-report.md
+
+          for gate in "property-tests" "data-consistency" "benchmarks" "visual-regression" "deep-security"; do
+            result="${{ needs.$gate.result }}"
+            icon=""
+            case "$result" in
+              success) icon="✅";;
+              failure) icon="🔴";;
+              skipped) icon="⏭️";;
+              *) icon="❓";;
+            esac
+            echo "| $gate | $icon $result |" >> quality-report.md
+          done
+
+      - name: Upload quality report
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-report
+          path: quality-report.md
