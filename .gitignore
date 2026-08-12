@@ -40,6 +40,12 @@ tests/visual/diffs/
 # Docker
 docker-compose.override.yml
 
+# Build artifacts
+dist/
+build/
+*.spec.bak
+*.exe
+
 # Node
 node_modules/
 frontend/dist/
