@@ -168,7 +168,7 @@ class OData1CClient:
             return "InformationRegister"
         if "РегистрНакопления" in name or name.startswith("AccumulationRegister_"):
             return "AccumulationRegister"
-        if "ПланВидовХарактеристик" in name:
+        if "ПланВидовХарактеристик" in name or name.startswith("ChartOfCharacteristicTypes"):
             return "ChartOfCharacteristicTypes"
         return "Catalog"
 
