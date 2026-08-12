@@ -1,0 +1,266 @@
+---
+# GOST BI — Ansible Deployment Playbook
+# Целевая платформа: Astra Linux SE 1.8 (Смоленск)
+# Совместимость: Alt Linux 10+, Debian 12
+#
+# Использование:
+#   ansible-playbook -i inventory.yml deploy.yml --ask-become-pass
+#
+# Переменные инвентаря:
+#   gost_bi_version: "0.1.0"
+#   gost_bi_port: 8088
+#   gost_bi_domain: "bi.example.com"
+#   gost_bi_db_host: "localhost"
+#   gost_bi_db_name: "gostbi"
+#   gost_bi_db_user: "gostbi"
+#   gost_bi_db_pass: "{{ vault_gost_bi_db_pass }}"
+
+- name: Deploy GOST BI
+  hosts: gost_bi_servers
+  become: yes
+  vars:
+    gost_bi_version: "0.1.0"
+    gost_bi_port: 8088
+    gost_bi_domain: "bi.example.com"
+    gost_bi_install_dir: "/opt/gost-bi"
+    gost_bi_user: "gostbi"
+    gost_bi_db_host: "localhost"
+    gost_bi_db_port: 5432
+    gost_bi_db_name: "gostbi"
+    gost_bi_db_user: "gostbi"
+
+  tasks:
+    # ============================================================
+    # 1. Системные зависимости
+    # ============================================================
+    - name: Установка системных пакетов
+      apt:
+        name:
+          - python3.12
+          - python3.12-venv
+          - python3.12-dev
+          - python3-pip
+          - postgresql-client-16
+          - redis-tools
+          - curl
+          - git
+          - nginx
+          - build-essential
+          - libpq-dev
+          - libssl-dev
+          - fonts-dejavu-core
+          - fonts-liberation
+        state: present
+        update_cache: yes
+      tags: [packages]
+
+    - name: Настройка русской локали
+      locale_gen:
+        name: ru_RU.UTF-8
+        state: present
+      tags: [locale]
+
+    # ============================================================
+    # 2. Пользователь и директории
+    # ============================================================
+    - name: Создание системного пользователя
+      user:
+        name: "{{ gost_bi_user }}"
+        system: yes
+        shell: /bin/false
+        create_home: no
+      tags: [user]
+
+    - name: Создание директорий
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ gost_bi_user }}"
+        group: "{{ gost_bi_user }}"
+        mode: "0755"
+      loop:
+        - "{{ gost_bi_install_dir }}"
+        - "{{ gost_bi_install_dir }}/venv"
+        - "{{ gost_bi_install_dir }}/logs"
+        - "/var/log/gost-bi"
+      tags: [dirs]
+
+    # ============================================================
+    # 3. Деплой исходного кода
+    # ============================================================
+    - name: Клонирование репозитория
+      git:
+        repo: "https://github.com/cptn73m0/gost-bi.git"
+        dest: "{{ gost_bi_install_dir }}"
+        version: "main"
+        force: yes
+      become_user: "{{ gost_bi_user }}"
+      tags: [deploy]
+
+    - name: Создание виртуального окружения Python
+      pip:
+        name:
+          - pip
+          - setuptools
+          - wheel
+        virtualenv: "{{ gost_bi_install_dir }}/venv"
+        virtualenv_command: python3.12 -m venv
+        virtualenv_python: python3.12
+      tags: [deploy]
+
+    - name: Установка GOST BI и зависимостей
+      pip:
+        requirements: "{{ gost_bi_install_dir }}/pyproject.toml"
+        virtualenv: "{{ gost_bi_install_dir }}/venv"
+        extra_args: "-e '.[dev]'"
+      tags: [deploy]
+
+    # ============================================================
+    # 4. Конфигурация
+    # ============================================================
+    - name: Создание .env файла
+      copy:
+        dest: "{{ gost_bi_install_dir }}/.env"
+        content: |
+          DATABASE_URL=postgresql://{{ gost_bi_db_user }}:{{ gost_bi_db_pass }}@{{ gost_bi_db_host }}:{{ gost_bi_db_port }}/{{ gost_bi_db_name }}
+          REDIS_URL=redis://localhost:6379/0
+          SUPERSET_SECRET_KEY={{ vault_superset_secret_key }}
+          GOST_BI_SQL_VERIFIER=true
+          LANG=ru_RU.UTF-8
+          TZ=Europe/Moscow
+          ENVIRONMENT=production
+        owner: "{{ gost_bi_user }}"
+        group: "{{ gost_bi_user }}"
+        mode: "0600"
+      tags: [config]
+
+    # ============================================================
+    # 5. Systemd-служба
+    # ============================================================
+    - name: Создание systemd-службы
+      copy:
+        dest: /etc/systemd/system/gost-bi.service
+        content: |
+          [Unit]
+          Description=GOST BI — Российская BI-платформа
+          After=network.target postgresql.service redis.service
+          Wants=postgresql.service redis.service
+
+          [Service]
+          Type=simple
+          User={{ gost_bi_user }}
+          Group={{ gost_bi_user }}
+          WorkingDirectory={{ gost_bi_install_dir }}
+          EnvironmentFile={{ gost_bi_install_dir }}/.env
+          ExecStart={{ gost_bi_install_dir }}/venv/bin/python -m uvicorn gost_bi.core.app:app --host 127.0.0.1 --port {{ gost_bi_port }} --workers 4
+          Restart=always
+          RestartSec=5
+          StandardOutput=append:/var/log/gost-bi/app.log
+          StandardError=append:/var/log/gost-bi/error.log
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: restart gost-bi
+      tags: [systemd]
+
+    - name: Включение и запуск службы
+      systemd:
+        name: gost-bi
+        enabled: yes
+        state: started
+        daemon_reload: yes
+      tags: [systemd]
+
+    # ============================================================
+    # 6. Nginx reverse proxy
+    # ============================================================
+    - name: Создание конфигурации Nginx
+      copy:
+        dest: /etc/nginx/sites-available/gost-bi
+        content: |
+          server {
+              listen 80;
+              server_name {{ gost_bi_domain }};
+
+              client_max_body_size 100M;
+
+              location / {
+                  proxy_pass http://127.0.0.1:{{ gost_bi_port }};
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection "upgrade";
+                  proxy_read_timeout 300s;
+              }
+
+              location /api/health {
+                  proxy_pass http://127.0.0.1:{{ gost_bi_port }}/api/health;
+                  access_log off;
+              }
+          }
+      notify: reload nginx
+      tags: [nginx]
+
+    - name: Активация сайта Nginx
+      file:
+        src: /etc/nginx/sites-available/gost-bi
+        dest: /etc/nginx/sites-enabled/gost-bi
+        state: link
+      notify: reload nginx
+      tags: [nginx]
+
+    - name: Удаление default site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: reload nginx
+      tags: [nginx]
+
+    # ============================================================
+    # 7. SSL (Certbot — опционально)
+    # ============================================================
+    - name: Проверка доступности Certbot
+      stat:
+        path: /usr/bin/certbot
+      register: certbot_bin
+      tags: [ssl]
+
+    - name: Получение SSL-сертификата
+      shell: |
+        certbot --nginx -d {{ gost_bi_domain }} --non-interactive --agree-tos --email {{ admin_email }} --redirect
+      when: certbot_bin.stat.exists and enable_ssl | default(false)
+      tags: [ssl]
+
+    # ============================================================
+    # 8. Финальная проверка
+    # ============================================================
+    - name: Проверка health endpoint
+      uri:
+        url: "http://127.0.0.1:{{ gost_bi_port }}/api/health"
+        status_code: 200
+      register: health_check
+      retries: 10
+      delay: 3
+      until: health_check.status == 200
+      tags: [verify]
+
+    - name: Вывод статуса деплоя
+      debug:
+        msg:
+          - "GOST BI v{{ gost_bi_version }} успешно развёрнут"
+          - "URL: http{% if enable_ssl | default(false) %}s{% endif %}://{{ gost_bi_domain }}"
+          - "Health: {{ health_check.json.status }}"
+
+  handlers:
+    - name: restart gost-bi
+      systemd:
+        name: gost-bi
+        state: restarted
+
+    - name: reload nginx
+      systemd:
+        name: nginx
+        state: reloaded

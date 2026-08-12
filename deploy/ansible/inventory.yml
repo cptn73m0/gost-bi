@@ -1,0 +1,11 @@
+---
+all:
+  hosts:
+    gost-bi-prod:
+      ansible_host: 192.168.1.100
+      ansible_user: root
+      gost_bi_domain: "bi.example.com"
+      gost_bi_version: "0.1.0"
+      gost_bi_port: 8088
+      admin_email: "admin@example.com"
+      enable_ssl: false

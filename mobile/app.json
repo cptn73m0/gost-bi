@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "ГОСТ БИ",
+    "slug": "gost-bi-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": { "backgroundColor": "#0052cc" },
+    "ios": { "supportsTablet": true, "bundleIdentifier": "ru.gost-bi.mobile" },
+    "android": { "adaptiveIcon": { "backgroundColor": "#0052cc" }, "package": "ru.gost_bi.mobile" },
+    "plugins": ["expo-secure-store", "expo-splash-screen"]
+  }
+}
