@@ -9,6 +9,8 @@ Entry point that serves:
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
 from fastapi import FastAPI, Request, WebSocket, Depends, HTTPException
@@ -19,7 +21,15 @@ from pydantic import BaseModel
 
 from gost_bi.core.auth import get_current_user, require_analyst, API_KEYS
 
-FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent.parent / "frontend"
+
+def _get_frontend_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        base = Path(sys._MEIPASS)
+    else:
+        base = Path(__file__).resolve().parent.parent.parent.parent
+    return base / "frontend"
+
+FRONTEND_DIR = _get_frontend_dir()
 FRONTEND_BUILD = FRONTEND_DIR / "dist"
 
 app = FastAPI(
@@ -192,12 +202,13 @@ async def app_config():
 async def serve_spa(request: Request, full_path: str):
     index_path = FRONTEND_BUILD / "index.html"
     if index_path.exists():
-        return HTMLResponse(index_path.read_text(encoding="utf-8"))
+        content = index_path.read_text(encoding="utf-8")
+        return HTMLResponse(content)
     return HTMLResponse(
         """<!DOCTYPE html>
 <html lang="ru">
-<head><meta charset="utf-8"><title>ГОСТ БИ</title></head>
+<head><meta charset="utf-8"><title>GOST BI</title></head>
 <body style="font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;color:#44546f;">
-<div style="text-align:center"><h1>ГОСТ БИ</h1><p>Фронтенд не собран. Запустите <code>cd frontend && npm run build</code></p></div>
+<div style="text-align:center"><h1>GOST BI</h1><p>Frontend not built. Run: cd frontend && npm run build</p></div>
 </body></html>"""
     )

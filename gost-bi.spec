@@ -14,7 +14,7 @@ a = Analysis(
     ["scripts/launcher.py"],
     pathex=[],
     binaries=psycopg2_binaries,
-    datas=[("src", "src")],
+    datas=[("src", "src"), ("frontend/dist", "frontend/dist")],
     hiddenimports=(
         fastapi_imports + starlette_imports + sqlglot_imports +
         uvicorn_imports + sqlalchemy_imports +

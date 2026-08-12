@@ -9,7 +9,7 @@ import { useState } from "react";
 type Page = "home" | "sql" | "gost" | "settings" | "admin";
 
 export default function App() {
-  const [page, setPage] = useState<Page>("home");
+  const [page] = useState<Page>("home");
 
   return (
     <ThemeProvider>
