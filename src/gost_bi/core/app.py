@@ -11,10 +11,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+
+from gost_bi.core.auth import get_current_user, require_analyst, API_KEYS
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent.parent / "frontend"
 FRONTEND_BUILD = FRONTEND_DIR / "dist"
@@ -51,7 +53,7 @@ async def health_check():
         "components": {
             "api": "ok",
             "sql_verifier": "ok",
-            "gost_templates": "ok",
+            "gost_templates": str(len(BUILTIN_TEMPLATES)) if "BUILTIN_TEMPLATES" in dir() else "ok",
         },
     }
 
@@ -64,6 +66,43 @@ async def readiness_check():
 @app.get("/api/health/live")
 async def liveness_check():
     return {"status": "alive"}
+
+
+# ============================================================
+# Auth-protected API
+# ============================================================
+
+@app.get("/api/me")
+async def current_user_info(user=Depends(get_current_user)):
+    return {
+        "id": user.id,
+        "login": user.login,
+        "full_name": user.full_name,
+        "email": user.email,
+        "roles": [r.value for r in user.roles],
+        "organization": user.organization,
+    }
+
+
+@app.get("/api/dashboards")
+async def list_dashboards(user=Depends(require_analyst)):
+    return {
+        "dashboards": [
+            {"id": "main", "name": "Главная", "widgets": 6},
+            {"id": "sales", "name": "Продажи", "widgets": 4},
+            {"id": "finance", "name": "Финансы", "widgets": 3},
+        ]
+    }
+
+
+# ============================================================
+# WebSocket
+# ============================================================
+
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    from gost_bi.core.websocket import hub
+    await hub.handle_client(websocket, client_id)
 
 
 # ============================================================

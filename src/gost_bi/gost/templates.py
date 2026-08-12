@@ -112,6 +112,48 @@ BUILTIN_TEMPLATES: list[GOSTTemplate] = [
             {"code": "INN", "name": "ИНН", "line": 3},
         ],
     ),
+    GOSTTemplate(
+        name="СЗВ-ТД",
+        code="SZV-TD",
+        description="Сведения о трудовой деятельности зарегистрированного лица",
+        category="Пенсионный фонд",
+        fields=[
+            {"code": "FIO", "name": "Фамилия, имя, отчество", "line": 1},
+            {"code": "SNILS", "name": "СНИЛС", "line": 2},
+            {"code": "EVENT_DATE", "name": "Дата кадрового мероприятия", "line": 3},
+            {"code": "EVENT_TYPE", "name": "Вид мероприятия (ПРИЁМ, ПЕРЕВОД, УВОЛЬНЕНИЕ)", "line": 4},
+            {"code": "POSITION", "name": "Должность", "line": 5},
+            {"code": "DEPARTMENT", "name": "Подразделение", "line": 6},
+        ],
+    ),
+    GOSTTemplate(
+        name="2-НДФЛ",
+        code="2NDFL",
+        description="Справка о доходах и суммах налога физического лица",
+        category="Налоговая отчётность",
+        fields=[
+            {"code": "INN", "name": "ИНН", "line": 1},
+            {"code": "FIO", "name": "Фамилия, имя, отчество", "line": 2},
+            {"code": "MONTH", "name": "Месяц", "line": 3},
+            {"code": "INCOME_CODE", "name": "Код дохода", "line": 4},
+            {"code": "INCOME_AMOUNT", "name": "Сумма дохода", "line": 5},
+            {"code": "DEDUCTION_CODE", "name": "Код вычета", "line": 6},
+            {"code": "DEDUCTION_AMOUNT", "name": "Сумма вычета", "line": 7},
+            {"code": "TAX_AMOUNT", "name": "Сумма налога", "line": 8},
+        ],
+    ),
+    GOSTTemplate(
+        name="П-4",
+        code="P-4",
+        description="Сведения о численности и заработной плате работников (Росстат)",
+        category="Статистика (Росстат)",
+        fields=[
+            {"code": "HEADCOUNT", "name": "Среднесписочная численность", "line": 1},
+            {"code": "PAYROLL_FUND", "name": "Фонд начисленной заработной платы", "line": 2},
+            {"code": "SOCIAL_PAYMENTS", "name": "Выплаты социального характера", "line": 3},
+            {"code": "HOURS_WORKED", "name": "Отработано человеко-часов", "line": 4},
+        ],
+    ),
 ]
 
 
