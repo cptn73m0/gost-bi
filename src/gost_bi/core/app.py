@@ -11,10 +11,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, Request, WebSocket, Depends
+from fastapi import FastAPI, Request, WebSocket, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from gost_bi.core.auth import get_current_user, require_analyst, API_KEYS
 
@@ -72,6 +73,10 @@ async def liveness_check():
 # Auth-protected API
 # ============================================================
 
+class SQLQueryRequest(BaseModel):
+    sql: str
+
+
 @app.get("/api/me")
 async def current_user_info(user=Depends(get_current_user)):
     return {
@@ -93,6 +98,59 @@ async def list_dashboards(user=Depends(require_analyst)):
             {"id": "finance", "name": "Финансы", "widgets": 3},
         ]
     }
+
+
+# ============================================================
+# Database
+# ============================================================
+
+DB_URL = "postgresql://gostbi:gostbi@localhost:5432/gostbi"
+
+
+def _get_db_engine():
+    import os
+    from sqlalchemy import create_engine
+    url = os.environ.get("DATABASE_URL", DB_URL)
+    return create_engine(url, connect_args={"connect_timeout": 3})
+
+
+@app.get("/api/db/status")
+async def db_status(user=Depends(require_analyst)):
+    try:
+        engine = _get_db_engine()
+        with engine.connect() as conn:
+            tables = conn.exec_driver_sql(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name"
+            ).fetchall()
+            counts = {}
+            for (tbl,) in tables:
+                cnt = conn.exec_driver_sql(f"SELECT COUNT(*) FROM {tbl}").scalar()
+                counts[tbl] = cnt
+        return {"status": "connected", "tables": counts}
+    except Exception as exc:
+        return {"status": "disconnected", "error": str(exc)}
+
+
+@app.post("/api/db/query")
+async def execute_query(req: SQLQueryRequest, user=Depends(require_analyst)):
+    from gost_bi.quality.sql_verifier import SQLVerifier
+
+    verifier = SQLVerifier()
+    report = verifier.verify(req.sql, nlp_input="API query", model="manual")
+    report.log()
+
+    if not report.overall_passed:
+        errors = [c.message for c in report.checks if not c.passed]
+        raise HTTPException(status_code=400, detail=f"SQL blocked: {'; '.join(errors)}")
+
+    try:
+        engine = _get_db_engine()
+        with engine.connect() as conn:
+            result = conn.exec_driver_sql(req.sql)
+            rows = [dict(row._mapping) for row in result.fetchall()]
+        return {"status": "ok", "rows": rows, "count": len(rows)}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # ============================================================
