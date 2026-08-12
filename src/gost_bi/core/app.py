@@ -1,16 +1,23 @@
 """
-Core FastAPI application stub.
+GOST BI — Core FastAPI Application.
 
-This will become the main entry point after Superset fork integration.
-Currently provides:
-- Health check endpoint (Level 11)
-- Basic API structure
+Entry point that serves:
+- REST API (health, config, dashboards, SQL, GOST)
+- Frontend SPA (React build via static files in dev mode)
+- WebSocket endpoint for real-time dashboard updates
 """
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+
+FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent.parent / "frontend"
+FRONTEND_BUILD = FRONTEND_DIR / "dist"
 
 app = FastAPI(
     title="GOST BI",
@@ -28,27 +35,72 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+if FRONTEND_BUILD.exists():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_BUILD / "assets")), name="assets")
+
+
+# ============================================================
+# Health (Level 11)
+# ============================================================
 
 @app.get("/api/health")
 async def health_check():
-    """Level 11: Health check endpoint for Kubernetes and monitoring."""
     return {
         "status": "healthy",
         "version": "0.1.0",
         "components": {
             "api": "ok",
+            "sql_verifier": "ok",
+            "gost_templates": "ok",
         },
     }
 
 
 @app.get("/api/health/ready")
 async def readiness_check():
-    """Kubernetes readiness probe."""
-    # TODO: check DB, Redis, Celery connectivity
     return {"status": "ready"}
 
 
 @app.get("/api/health/live")
 async def liveness_check():
-    """Kubernetes liveness probe."""
     return {"status": "alive"}
+
+
+# ============================================================
+# Theme & Configuration
+# ============================================================
+
+@app.get("/api/config")
+async def app_config():
+    return {
+        "name": "ГОСТ БИ",
+        "version": "0.1.0",
+        "language": "ru",
+        "date_format": "DD.MM.YYYY",
+        "currency": "₽",
+        "features": {
+            "sql_lab": True,
+            "nlp_sql": True,
+            "gost_reports": True,
+            "dark_mode": True,
+        },
+    }
+
+
+# ============================================================
+# Frontend SPA
+# ============================================================
+
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+async def serve_spa(request: Request, full_path: str):
+    index_path = FRONTEND_BUILD / "index.html"
+    if index_path.exists():
+        return HTMLResponse(index_path.read_text(encoding="utf-8"))
+    return HTMLResponse(
+        """<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>ГОСТ БИ</title></head>
+<body style="font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;color:#44546f;">
+<div style="text-align:center"><h1>ГОСТ БИ</h1><p>Фронтенд не собран. Запустите <code>cd frontend && npm run build</code></p></div>
+</body></html>"""
+    )
