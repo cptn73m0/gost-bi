@@ -1,0 +1,90 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: gost-bi:latest
+    ports:
+      - "8088:8088"
+    environment:
+      - DATABASE_URL=postgresql://gostbi:gostbi@tantor:5432/gostbi
+      - REDIS_URL=redis://redis:6379/0
+      - SUPERSET_SECRET_KEY=dev-secret-change-in-production
+      - SUPERSET_CONFIG_PATH=/app/superset/gost_bi_config.py
+      - ENVIRONMENT=development
+      - GOST_BI_SQL_VERIFIER=true
+      - CSV_EXPORT_ENCODING=windows-1251
+      - TZ=Europe/Moscow
+    depends_on:
+      tantor:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../src:/app/src
+      - ../superset:/app/superset
+      - superset_home:/home/gostbi/.superset
+    restart: unless-stopped
+
+  tantor:
+    image: tantordb/tantor-se:18
+    environment:
+      POSTGRES_DB: gostbi
+      POSTGRES_USER: gostbi
+      POSTGRES_PASSWORD: gostbi
+      TZ: Europe/Moscow
+    ports:
+      - "5432:5432"
+    volumes:
+      - tantor_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gostbi -d gostbi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  celery-worker:
+    image: gost-bi:latest
+    command: celery -A superset.tasks.celery_app worker -l INFO
+    environment:
+      - DATABASE_URL=postgresql://gostbi:gostbi@tantor:5432/gostbi
+      - REDIS_URL=redis://redis:6379/0
+      - SUPERSET_CONFIG_PATH=/app/superset/gost_bi_config.py
+    depends_on:
+      - tantor
+      - redis
+    volumes:
+      - ../src:/app/src
+      - ../superset:/app/superset
+    restart: unless-stopped
+
+  celery-beat:
+    image: gost-bi:latest
+    command: celery -A superset.tasks.celery_app beat -l INFO
+    environment:
+      - DATABASE_URL=postgresql://gostbi:gostbi@tantor:5432/gostbi
+      - REDIS_URL=redis://redis:6379/0
+      - SUPERSET_CONFIG_PATH=/app/superset/gost_bi_config.py
+    depends_on:
+      - tantor
+      - redis
+    volumes:
+      - ../src:/app/src
+      - ../superset:/app/superset
+    restart: unless-stopped
+
+volumes:
+  tantor_data:
+  superset_home:
