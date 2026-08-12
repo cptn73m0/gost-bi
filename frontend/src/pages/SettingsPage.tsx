@@ -7,10 +7,17 @@ export function SettingsPage() {
   const [redisUrl, setRedisUrl] = useState("redis://localhost:6379/0");
   const [lang, setLang] = useState("ru");
   const [saved, setSaved] = useState(false);
+  const [testingDb, setTestingDb] = useState(false);
+  const [dbTestResult, setDbTestResult] = useState<{ok:boolean;msg:string} | null>(null);
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
+  const handleTestDb = async () => {
+    setTestingDb(true); setDbTestResult(null);
+    try { const r = await fetch("/api/db/status", { headers: { "X-API-Key": "gost-bi-dev-key" } }); const d = await r.json();
+      if (d.status === "connected") setDbTestResult({ok:true,msg:`Подключено. ${Object.keys(d.tables||{}).length} таблиц.`});
+      else setDbTestResult({ok:false,msg:d.error||"Не удалось подключиться"});
+    } catch { setDbTestResult({ok:false,msg:"Сервер недоступен"}); }
+    finally { setTimeout(() => setDbTestResult(null), 4000); }
   };
 
   return (
@@ -82,10 +89,18 @@ export function SettingsPage() {
               <button className="btn btn-primary" onClick={handleSave}>
                 {saved ? "Сохранено" : "Сохранить"}
               </button>
-              <button className="btn btn-sm btn-ghost" style={{ fontSize: "var(--font-xs)", color: "var(--accent-primary)" }}>
-                Проверить подключение
+              <button className="btn btn-sm btn-ghost" onClick={handleTestDb} disabled={testingDb}
+                style={{ fontSize: "var(--font-xs)", color: testingDb ? "var(--text-disabled)" : "var(--accent-primary)" }}>
+                {testingDb ? <span className="spinner" /> : "Проверить подключение"}
               </button>
             </div>
+            {dbTestResult && (
+              <div style={{ fontSize: 12, padding: "6px 10px", borderRadius: "var(--radius-sm)", marginTop: 6,
+                background: dbTestResult.ok ? "var(--success-subtle)" : "var(--danger-subtle)",
+                color: dbTestResult.ok ? "var(--success)" : "var(--danger)" }}>
+                {dbTestResult.msg}
+              </div>
+            )}
           </div>
         </div>
 

@@ -15,36 +15,46 @@ const SAMPLE_COLS = [
   { key: "units", title: "Количество" },
 ];
 
-const SAMPLE_ROWS = [
-  { date: "2026-08-10", region: "Москва", product: "Ноутбук", revenue: "150 000", units: "1" },
-  { date: "2026-08-10", region: "Санкт-Петербург", product: "Монитор", revenue: "45 000", units: "2" },
-  { date: "2026-08-09", region: "Москва", product: "Клавиатура", revenue: "3 500", units: "5" },
-  { date: "2026-08-09", region: "Казань", product: "Мышь", revenue: "2 000", units: "10" },
-  { date: "2026-08-08", region: "Москва", product: "Ноутбук", revenue: "150 000", units: "1" },
-];
-
 export function SQLLabPage() {
   const [nlpInput, setNlpInput] = useState("");
   const [sql, setSql] = useState("");
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<typeof SAMPLE_ROWS | null>(null);
+  const [results, setResults] = useState<Record<string,string>[] | null>(null);
+  const [resultsCols, setResultsCols] = useState<{key:string;title:string}[]>(SAMPLE_COLS);
+  const [error, setError] = useState("");
   const [mode, setMode] = useState<"nlp" | "sql">("nlp");
 
   const handleNLPSubmit = async () => {
     if (!nlpInput.trim()) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setSql(`SELECT date, region, product, revenue, units\nFROM sales\nWHERE date >= CURRENT_DATE - INTERVAL '7 days'\nORDER BY date DESC`);
-    setResults(SAMPLE_ROWS);
-    setLoading(false);
+    try {
+      const resp = await fetch("/api/db/query", {
+        method: "POST", headers: { "Content-Type": "application/json", "X-API-Key": "gost-bi-dev-key" },
+        body: JSON.stringify({ sql: `SELECT * FROM sales WHERE date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY date DESC LIMIT 20` }),
+      });
+      const data = await resp.json();
+      if (data.status === "ok") {
+        setResults(data.rows.map((r: Record<string,unknown>) => ({ date: String(r.date||""), region: String(r.region||""), product: String(r.product||""), revenue: String(r.revenue||""), units: String(r.units||"") })));
+        setSql(`SELECT * FROM sales\nWHERE date >= CURRENT_DATE - INTERVAL '30 days'\nORDER BY date DESC\nLIMIT 20`);
+      }
+    } catch { setResults(null); } finally { setLoading(false); }
   };
 
   const handleSQLSubmit = async () => {
     if (!sql.trim()) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setResults(SAMPLE_ROWS);
-    setLoading(false);
+    try {
+      const resp = await fetch("/api/db/query", {
+        method: "POST", headers: { "Content-Type": "application/json", "X-API-Key": "gost-bi-dev-key" },
+        body: JSON.stringify({ sql }),
+      });
+      const data = await resp.json();
+      if (data.status === "ok") {
+        const cols = data.rows.length > 0 ? Object.keys(data.rows[0]) : [];
+        setResultsCols(cols.map((c: string) => ({ key: c, title: c })));
+        setResults(data.rows.map((r: Record<string,unknown>) => Object.fromEntries(Object.entries(r).map(([k,v]) => [k, String(v??"")]))));
+      } else { setResults(null); setError(data.detail || "Ошибка"); }
+    } catch { setResults(null); } finally { setLoading(false); }
   };
 
   return (
@@ -147,10 +157,11 @@ export function SQLLabPage() {
             </div>
           </div>
           <div style={{ padding: "0 16px 16px" }}>
-            <DataTable columns={SAMPLE_COLS} rows={results} pageSize={10} />
+            <DataTable columns={resultsCols} rows={results} pageSize={10} />
           </div>
         </div>
       )}
+      {error && <div style={{ color: "var(--danger)", fontSize: 13, marginTop: 8 }}>{error}</div>}
     </>
   );
 }

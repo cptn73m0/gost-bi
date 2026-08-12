@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from gost_bi.core.auth import get_current_user, require_analyst, API_KEYS
+from gost_bi.core.auth import get_current_user, require_analyst, require_admin, API_KEYS
 
 
 def _get_frontend_dir() -> Path:
@@ -108,6 +108,70 @@ async def list_dashboards(user=Depends(require_analyst)):
             {"id": "finance", "name": "Финансы", "widgets": 3},
         ]
     }
+
+
+# ============================================================
+# Auth endpoints
+# ============================================================
+
+class LoginRequest(BaseModel):
+    login: str
+    password: str
+
+
+class RegisterRequest(BaseModel):
+    login: str
+    password: str
+    full_name: str
+    role: str = "viewer"
+
+
+@app.post("/api/auth/login")
+async def login(req: LoginRequest, request: Request):
+    from gost_bi.core.auth_service import authenticate
+    ip = request.client.host if request.client else ""
+    result = authenticate(req.login, req.password, ip)
+    if not result:
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+    return result
+
+
+@app.post("/api/auth/register")
+async def register(req: RegisterRequest, user=Depends(require_admin)):
+    from gost_bi.core.auth_service import register_user
+    result = register_user(req.login, req.password, req.full_name, req.role)
+    if not result:
+        raise HTTPException(status_code=400, detail="Не удалось создать пользователя")
+    return result
+
+
+@app.get("/api/auth/setup-status")
+async def setup_status():
+    from gost_bi.core.auth_service import has_admin
+    return {"has_admin": has_admin()}
+
+
+@app.post("/api/auth/setup")
+async def setup_admin(req: RegisterRequest):
+    from gost_bi.core.auth_service import has_admin, register_user
+    if has_admin():
+        raise HTTPException(status_code=400, detail="Администратор уже существует")
+    result = register_user(req.login, req.password, req.full_name, "admin")
+    if not result:
+        raise HTTPException(status_code=400, detail="Не удалось создать администратора")
+    return result
+
+
+@app.get("/api/auth/users")
+async def list_users_endpoint(user=Depends(require_admin)):
+    from gost_bi.core.auth_service import list_users
+    return {"users": list_users()}
+
+
+@app.get("/api/auth/audit")
+async def audit_log_endpoint(user=Depends(require_admin), limit: int = 100):
+    from gost_bi.core.auth_service import get_audit_log
+    return {"entries": get_audit_log(limit)}
 
 
 # ============================================================

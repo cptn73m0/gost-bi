@@ -51,7 +51,7 @@ const NAV_SECTIONS: SidebarSection[] = [
   },
 ];
 
-export function AppLayout({ children, activePage, onNavigate }: { children: ReactNode; activePage?: string; onNavigate?: (page: string) => void }) {
+export function AppLayout({ children, activePage, onNavigate, onLogout, userName }: { children: ReactNode; activePage?: string; onNavigate?: (page: string) => void; onLogout?: () => void; userName?: string }) {
   const { theme, toggle } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -135,7 +135,9 @@ export function AppLayout({ children, activePage, onNavigate }: { children: Reac
               {theme === "light" ? "🌙" : "☀️"}
             </button>
             <div className="header-divider" />
-            <div className="user-avatar">АИ</div>
+            <span style={{ fontSize: "var(--font-sm)", color: "var(--text-secondary)", marginRight: 6 }}>{userName || "Гость"}</span>
+            <div className="user-avatar">{userName?.charAt(0) || "?"}</div>
+            {onLogout && <button className="header-btn" onClick={onLogout} title="Выйти" style={{ marginLeft: 4 }}>⏻</button>}
           </div>
         </header>
 

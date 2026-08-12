@@ -25,10 +25,10 @@ a = Analysis(
          "gost_bi.connectors", "gost_bi.connectors.odata_1c",
          "gost_bi.gost", "gost_bi.gost.templates",
          "gost_bi.nlp", "gost_bi.nlp.pipeline_v2_1",
-         "gost_bi.core.auth", "gost_bi.core.integration",
+         "gost_bi.core.auth", "gost_bi.core.auth_service", "gost_bi.core.integration",
          "gost_bi.core.websocket",
          "sqlalchemy", "sqlalchemy.dialects", "sqlalchemy.dialects.postgresql",
-         "psycopg2", "httpx", "redis", "redis.asyncio",
+         "psycopg2", "bcrypt", "jwt", "httpx", "redis", "redis.asyncio",
          "tenacity", "pydantic", "yaml"]
     ),
     hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=[],
